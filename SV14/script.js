@@ -101,3 +101,16 @@ function animate() {
 }
 
 animate();
+// --- Intro cinematográfica ---
+
+const intro = document.getElementById("intro-screen");
+const startBtn = document.getElementById("startExperience");
+
+startBtn.addEventListener("click", () => {
+  music.play().catch(() => {});
+  intro.classList.add("fade-out");
+
+  setTimeout(() => {
+    intro.style.display = "none";
+  }, 800);
+});

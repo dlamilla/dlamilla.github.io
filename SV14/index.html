@@ -3,18 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nuestra Historia ❤️</title>
+  <title>Nuestra Historia</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="../assets/img/favicon-16x16.png" type="image/png">
 </head>
 <body>
+  <!-- Pantalla de inicio con fade -->
+  <div id="intro-screen">
+    <div class="intro-content">
+      <h1>.:: Nuestra Historia ::.</h1>
+      <button id="startExperience" class="game-btn">
+        Toca para empezar
+      </button>
+    </div>
+  </div>
+
   <!-- Música de fondo -->
   <audio id="bgMusic" src="music.mp3" loop></audio>
 
   <!-- Canvas de partículas -->
   <canvas id="particles"></canvas>
 
-  <div class="game-container" onclick="startMusic()">
-    <div class="header">Nivel 1: Nuestra Historia 💕</div>
+  <div class="game-container">
+    <div class="header">.:: Nivel 1: Nuestra Historia ::.</div>
 
     <div class="progress-bar">
       <div class="progress" id="progress"></div>
@@ -23,32 +34,48 @@
     <!-- Slides -->
     <div class="slide active">
       <div class="image-placeholder">Dibujo 1</div>
-      <div class="text">Aquí empezó todo… cuando te conocí y mi cerebro dejó de funcionar 😳</div>
+      <div class="text">Aquí empezó todo… nos conocimos en una clase de inglés</div>
     </div>
 
     <div class="slide">
       <div class="image-placeholder">Dibujo 2</div>
-      <div class="text">Luego vinieron las risas, las bromas… y me enamoré sin darme cuenta 😌</div>
+      <div class="text">Fuiste la primera en hablarme, preguntando por una tarea... y poco a poco nuestras conversaciones se volvieron parte de mi día a día</div>
     </div>
 
     <div class="slide">
       <div class="image-placeholder">Dibujo 3</div>
-      <div class="text">Cada momento contigo se volvió mi parte favorita del día ❤️</div>
+      <div class="text">Empezamos a contarnos nuestras cosas... y encontre en ti un apoyo que no sabía que necesitaba</div>
+    </div>
+
+    <div class="slide">
+      <div class="image-placeholder">Dibujo 4</div>
+      <div class="text">Sin darme cuenta empecé a enamorarme de ti... quería saber cómo estabas, qué hacías, si estabas bien.</div>
+    </div>
+
+    <div class="slide">
+      <div class="image-placeholder">Dibujo 5</div>
+      <div class="text">Aun recuerdo la noche donde ambos nos dijimos que nos gustabamos... fue una de las noches más bonitas de mi vida</div>
+    </div>
+
+    <div class="slide">
+      <div class="image-placeholder">Dibujo 6</div>
+      <div class="text">Ahora solo espero con ansias el momento de verte para darte mucho cariñito... porque eres alguien muy especial para mí</div>
     </div>
 
     <!-- Pantalla final -->
     <div class="final-screen">
       <div class="heart">❤️</div>
       <h2>Feliz San Valentín mi princesa hermosa</h2>
-      <p>Gracias por ser mi historia favorita ✨</p>
-      <div class="confetti">🎉 💖 🎉</div>
+      <p>Gracias por ser mi historia favorita</p>
+
       <button class="game-btn" onclick="restart()">Jugar otra vez</button>
+      <p>Te amo muchísimo</p>
     </div>
 
     <!-- Controls -->
     <div class="controls">
-      <button class="game-btn" onclick="prevSlide(event)">⬅ Atrás</button>
-      <button class="game-btn" onclick="nextSlide(event)">Siguiente ➡</button>
+      <button class="game-btn nav-btn" onclick="prevSlide(event)">⬅ Atrás</button>
+      <button class="game-btn nav-btn" onclick="nextSlide(event)">Siguiente ➡</button>
     </div>
   </div>
 
