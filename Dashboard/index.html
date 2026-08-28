@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi Presupuesto — Dashboard Interactivo</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Estilos mínimos para el overlay de carga / error, no dependen de styles.css */
+  #syncOverlay {
+    position: fixed; inset: 0; background: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Sans', sans-serif; font-size: 15px; color: #555;
+    z-index: 9999;
+  }
+  #syncOverlay.hidden { display: none; }
+  #syncError {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    background: #C45D3E; color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; z-index: 10000; display: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="syncOverlay"><div>Cargando datos desde Google Sheets…</div></div>
+<div id="syncError"></div>
+
+<div class="container">
+  <header class="header">
+    <div>
+      <h1 class="header-title">Mi Presupuesto</h1>
+      <p class="header-sub">Panel interactivo de gastos, ingresos y ahorros</p>
+    </div>
+    <div class="month-selector">
+      <label for="monthSelect">Periodo</label>
+      <select id="monthSelect"></select>
+    </div>
+  </header>
+
+  <section class="kpi-row" id="kpiRow"></section>
+
+  <section class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h2 class="chart-card-title">Distribución de Gastos</h2>
+        <p class="chart-card-subtitle">Por categoría principal</p>
+      </div>
+      <div class="chart-card-body" id="pieChart"></div>
+      <div class="chart-card-insight" id="pieInsight"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h2 class="chart-card-title">Ingreso vs Gasto vs Ahorro</h2>
+        <p class="chart-card-subtitle">Flujo mensual de dinero</p>
+      </div>
+      <div class="chart-card-body" id="barChart"></div>
+      <div class="chart-card-insight" id="barInsight"></div>
+    </div>
+  </section>
+
+  <section class="savings-bar-card" id="savingsBar"></section>
+
+  <section class="detail-section">
+    <div class="detail-card">
+      <div class="detail-header">
+        <h3>Detalle de Gastos</h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div class="cat-tabs" id="catTabs"></div>
+          <button class="btn btn-add" onclick="openAddModal()">+ Agregar gasto</button>
+        </div>
+      </div>
+      <div class="detail-table-wrap">
+        <table class="detail-table" id="detailTable">
+          <thead>
+            <tr>
+              <th>Gasto</th>
+              <th>Categoría</th>
+              <th>Monto (S/)</th>
+              <th>Pago</th>
+              <th>Compartido</th>
+              <th>Costo real (S/)</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer class="dash-footer">
+    Fuente: Google Sheets · Sincronizado en vivo · Moneda: Soles (S/)
+  </footer>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Editar Gasto</h3>
+    <input type="hidden" id="editId">
+    <div class="modal-field">
+      <label>Nombre del gasto</label>
+      <input id="editName" placeholder="Ej: Netflix">
+    </div>
+    <div class="modal-field">
+      <label>Categoría</label>
+      <select id="editCategory">
+        <option value="Hogar">Hogar</option>
+        <option value="Online">Online</option>
+        <option value="Salud">Salud</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Monto total (S/)</label>
+      <input id="editAmount" type="number" step="0.01" placeholder="0.00">
+    </div>
+    <div class="modal-field">
+      <label>Método de pago</label>
+      <input id="editPayment" placeholder="Ej: BCP, YAPE">
+    </div>
+    <div class="modal-field">
+      <label>¿Compartido?</label>
+      <select id="editShared" onchange="toggleSharedFields()">
+        <option value="No">No</option>
+        <option value="Sí">Sí</option>
+      </select>
+    </div>
+    <div class="modal-field" id="sharedFields" style="display:none;">
+      <label>N° personas que comparten</label>
+      <input id="editPersons" type="number" value="2" min="2">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="saveEdit()">Guardar</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-secondary" id="deleteBtn" style="margin-left:auto;color:var(--accent);" onclick="deleteExpenseHandler()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+// CONFIGURA ESTOS DOS VALORES con los datos de tu Apps Script
+// ====================================================================
+const API_URL = 'https://script.google.com/macros/s/AKfycbwgHjzVeapfCjYt6B5YZq9hUFF_dzC7SDPvmqaajG0Qa-eF34QaqWhT6S-LIajjA6anzw/exec'; // termina en /exec
+const API_TOKEN = 'mipresupuesto2026xk9';     // debe coincidir con TOKEN en Code.gs
+
+let appData = null;
+let currentMonth = null;
+let currentFilter = 'Todos';
+let pieChartInstance = null;
+let barChartInstance = null;
+
+// ---------- Capa de API (reemplaza a localStorage) ----------
+
+async function apiGet() {
+  const res = await fetch(`${API_URL}?token=${encodeURIComponent(API_TOKEN)}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function apiPost(action, payload) {
+  const res = await fetch(`${API_URL}?token=${encodeURIComponent(API_TOKEN)}`, {
+    method: 'POST',
+    body: JSON.stringify({ action, ...payload })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+function showSync(loading) {
+  document.getElementById('syncOverlay').classList.toggle('hidden', !loading);
+}
+
+function showError(msg) {
+  const el = document.getElementById('syncError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ---------- Inicialización ----------
+
+async function init() {
+  showSync(true);
+  try {
+    appData = await apiGet();
+    const keys = Object.keys(appData.months).sort();
+    if (keys.length === 0) {
+      showError('No hay meses en el Sheet todavía. Agrega uno desde el selector.');
+      appData.months = {};
+    }
+    currentMonth = keys.length ? keys[keys.length - 1] : null;
+    populateMonthSelector();
+    renderAll();
+  } catch (err) {
+    showError('No se pudo conectar con Google Sheets: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+async function refreshData() {
+  showSync(true);
+  try {
+    appData = await apiGet();
+    populateMonthSelector();
+    renderAll();
+  } catch (err) {
+    showError('No se pudo sincronizar: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+// ---------- Selector de mes ----------
+
+function populateMonthSelector() {
+  const sel = document.getElementById('monthSelect');
+  sel.innerHTML = '';
+  const keys = Object.keys(appData.months).sort();
+  keys.forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = appData.months[k].label;
+    sel.appendChild(opt);
+  });
+  const optAdd = document.createElement('option');
+  optAdd.value = '__add__';
+  optAdd.textContent = '+ Nuevo mes';
+  sel.appendChild(optAdd);
+
+  if (currentMonth) sel.value = currentMonth;
+
+  sel.onchange = async (e) => {
+    if (e.target.value === '__add__') {
+      await addNewMonth();
+    } else {
+      currentMonth = e.target.value;
+      renderAll();
+    }
+  };
+}
+
+async function addNewMonth() {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const key = y + '-' + m;
+
+  if (appData.months[key]) {
+    currentMonth = key;
+    populateMonthSelector();
+    renderAll();
+    return;
+  }
+
+  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const label = monthNames[today.getMonth()] + ' ' + y;
+  const prevKey = Object.keys(appData.months).sort().pop();
+  const defaultIncome = prevKey ? appData.months[prevKey].income : 0;
+
+  showSync(true);
+  try {
+    appData = await apiPost('addMonth', { mes: key, label, income: defaultIncome });
+    currentMonth = key;
+    populateMonthSelector();
+    renderAll();
+  } catch (err) {
+    showError('No se pudo crear el mes: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+function getMonthData() {
+  return appData.months[currentMonth] || { label: '', income: 0, expenses: [] };
+}
+
+// ---------- Cálculos ----------
+
+function calcTotals(expenses, income) {
+  let totalBruto = 0;
+  let totalReal = 0;
+  const byCat = { Hogar: 0, Online: 0, Salud: 0 };
+  expenses.forEach(e => {
+    totalBruto += e.amount;
+    totalReal += e.realCost;
+    if (byCat[e.category] !== undefined) byCat[e.category] += e.realCost;
+  });
+  const descuento = totalBruto - totalReal;
+  const savings = income - totalReal;
+  const savingsPct = income ? Math.round((savings / income) * 100) : 0;
+  return { totalBruto, totalReal, descuento, savings, savingsPct, byCat };
+}
+
+function getPrevMonthKey() {
+  const keys = Object.keys(appData.months).sort();
+  const idx = keys.indexOf(currentMonth);
+  return idx > 0 ? keys[idx - 1] : null;
+}
+
+// ---------- KPIs ----------
+
+function renderKPIs() {
+  const month = getMonthData();
+  const t = calcTotals(month.expenses, month.income);
+  const prevKey = getPrevMonthKey();
+  const prevTotals = prevKey ? calcTotals(appData.months[prevKey].expenses, appData.months[prevKey].income) : null;
+
+  const kpiRow = document.getElementById('kpiRow');
+  kpiRow.innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:var(--green-light);color:var(--green);">&#9679;</div>
+      <div class="kpi-label">Ingreso Mensual</div>
+      <div class="kpi-value">S/ ${month.income.toLocaleString('es-PE')}</div>
+      <div class="kpi-delta down">${prevTotals ? 'Click para editar' : 'Click para editar'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:var(--accent-light);color:var(--accent);">&#9679;</div>
+      <div class="kpi-label">Gasto Real</div>
+      <div class="kpi-value">S/ ${t.totalReal.toFixed(2)}</div>
+      <div class="kpi-delta up">${prevTotals ? deltaArrow(t.totalReal, prevTotals.totalReal, true) : 'Mes actual'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:var(--blue-light);color:var(--blue);">&#9679;</div>
+      <div class="kpi-label">Ahorro</div>
+      <div class="kpi-value">S/ ${t.savings.toFixed(2)}</div>
+      <div class="kpi-delta down">${prevTotals ? deltaArrow(t.savings, prevTotals.savings, false) : 'Mes actual'}</div>
+    </div>
+  `;
+}
+
+function deltaArrow(curr, prev, isExpense) {
+  const diff = curr - prev;
+  const pct = prev ? Math.abs(Math.round(diff / prev * 100)) : 0;
+  const sign = diff >= 0 ? '▲' : '▼';
+  const cls = isExpense ? (diff >= 0 ? 'up' : 'down') : (diff >= 0 ? 'down' : 'up');
+  return `<span class="kpi-delta ${cls}">${sign} ${pct}% vs mes anterior</span>`;
+}
+
+// ---------- Gráficos ----------
+
+function renderPieChart() {
+  const month = getMonthData();
+  const t = calcTotals(month.expenses, month.income);
+  const dom = document.getElementById('pieChart');
+  if (pieChartInstance) pieChartInstance.dispose();
+  pieChartInstance = echarts.init(dom);
+
+  const pieData = Object.entries(t.byCat).map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
+  const colorMap = { 'Hogar': '#C45D3E', 'Online': '#4A6B8A', 'Salud': '#4A7C59' };
+
+  pieChartInstance.setOption({
+    tooltip: { trigger: 'item', formatter: p => `${p.name}<br/>S/ ${p.value.toFixed(2)} (${p.percent}%)` },
+    series: [{
+      type: 'pie',
+      radius: ['42%', '72%'],
+      center: ['50%', '50%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 3 },
+      label: { show: true, formatter: '{b}\nS/ {c}', fontSize: 12, color: '#2C2A27' },
+      labelLine: { length: 12, length2: 8 },
+      data: pieData.map(d => ({ ...d, itemStyle: { color: colorMap[d.name] } })),
+      animationType: 'scale',
+      animationEasing: 'elasticOut',
+      animationDelay: idx => idx * 100
+    }]
+  });
+
+  const top = Object.entries(t.byCat).sort((a, b) => b[1] - a[1]);
+  document.getElementById('pieInsight').textContent = t.totalReal
+    ? `Tu mayor categoría de gasto es ${top[0][0]} (S/ ${top[0][1].toFixed(2)}), representando el ${Math.round(top[0][1] / t.totalReal * 100)}% del gasto total real.`
+    : 'Aún no hay gastos registrados este mes.';
+
+  window.addEventListener('resize', () => pieChartInstance && pieChartInstance.resize());
+}
+
+function renderBarChart() {
+  const month = getMonthData();
+  const t = calcTotals(month.expenses, month.income);
+  const dom = document.getElementById('barChart');
+  if (barChartInstance) barChartInstance.dispose();
+  barChartInstance = echarts.init(dom);
+
+  barChartInstance.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: params => params.map(p => `${p.seriesName}: S/ ${p.value.toFixed(2)}`).join('<br/>') },
+    grid: { left: 50, right: 20, top: 20, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: ['Ingreso', 'Gasto Real', 'Ahorro'],
+      axisLine: { lineStyle: { color: '#E8E4DF' } },
+      axisLabel: { color: '#8A8680', fontSize: 12 },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisLabel: { color: '#8A8680', fontSize: 11, formatter: v => 'S/ ' + v },
+      splitLine: { lineStyle: { color: '#F0ECE8', type: 'dashed' } }
+    },
+    series: [{
+      type: 'bar',
+      barWidth: '45%',
+      data: [
+        { value: month.income, itemStyle: { color: '#4A7C59' } },
+        { value: parseFloat(t.totalReal.toFixed(2)), itemStyle: { color: '#C45D3E' } },
+        { value: parseFloat(t.savings.toFixed(2)), itemStyle: { color: '#4A6B8A' } }
+      ],
+      itemStyle: { borderRadius: [4, 4, 0, 0] },
+      label: { show: true, position: 'top', formatter: p => 'S/ ' + p.value.toLocaleString('es-PE'), fontSize: 11, color: '#2C2A27' },
+      animationDelay: idx => idx * 150
+    }]
+  });
+
+  document.getElementById('barInsight').textContent = month.income
+    ? `De tus S/ ${month.income.toLocaleString('es-PE')} de ingreso, destinas S/ ${t.totalReal.toFixed(2)} a gastos (${Math.round(t.totalReal / month.income * 100)}%) y ahorras S/ ${t.savings.toFixed(2)} (${t.savingsPct}%).`
+    : 'Configura tu ingreso mensual haciendo click en la tarjeta "Ingreso Mensual".';
+
+  window.addEventListener('resize', () => barChartInstance && barChartInstance.resize());
+}
+
+function renderSavingsBar() {
+  const goal = appData.goal || 0;
+  let accumulated = 0;
+  Object.values(appData.months).forEach(m => {
+    accumulated += calcTotals(m.expenses, m.income).savings;
+  });
+  const pct = goal ? Math.max(0, Math.min(100, Math.round(accumulated / goal * 100))) : 0;
+
+  document.getElementById('savingsBar').innerHTML = `
+    <div class="savings-bar-header">
+      <h3>Meta de Ahorro <span style="font-weight:400;color:var(--text-muted);font-size:12px;">(acumulado, todos los meses)</span></h3>
+      <div class="savings-pct" id="goalEditTrigger" style="cursor:pointer;" title="Click para editar la meta">${pct}%</div>
+    </div>
+    <div class="savings-track">
+      <div class="savings-fill" style="width:${pct}%"></div>
+    </div>
+    <div class="savings-labels">
+      <span>S/ 0</span>
+      <span class="savings-remaining">Ahorrado: S/ ${accumulated.toFixed(2)} de S/ ${goal.toLocaleString('es-PE')}</span>
+      <span>S/ ${goal.toLocaleString('es-PE')}</span>
+    </div>
+  `;
+
+  document.getElementById('goalEditTrigger').addEventListener('click', editGoal);
+}
+
+async function editGoal() {
+  const newGoal = prompt('Ingresa tu meta de ahorro acumulada (S/):', appData.goal || 0);
+  if (newGoal === null || isNaN(parseFloat(newGoal))) return;
+
+  showSync(true);
+  try {
+    appData = await apiPost('updateGoal', { goal: parseFloat(newGoal) });
+    renderAll();
+  } catch (err) {
+    showError('No se pudo actualizar la meta: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+// ---------- Tabla de detalle ----------
+
+function renderDetailTable() {
+  const expenses = getMonthData().expenses;
+  const filtered = currentFilter === 'Todos' ? expenses : expenses.filter(e => e.category === currentFilter);
+
+  const tabs = document.getElementById('catTabs');
+  const cats = ['Todos', 'Hogar', 'Online', 'Salud'];
+  tabs.innerHTML = cats.map(c =>
+    `<button class="cat-tab ${c === currentFilter ? 'active' : ''}" onclick="setFilter('${c}')">${c}</button>`
+  ).join('');
+
+  const tbody = document.getElementById('detailBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No hay gastos en esta categoría. Agrega uno con el botón "+ Agregar gasto".</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(e => `
+    <tr>
+      <td>${e.name}</td>
+      <td>${e.category}</td>
+      <td class="amount expense">S/ ${e.amount.toFixed(2)}</td>
+      <td>${e.payment}</td>
+      <td>${e.shared === 'Sí' ? '<span class="badge badge-shared">Sí · ' + e.persons + ' personas</span>' : '<span class="badge badge-personal">Personal</span>'}</td>
+      <td class="amount" style="font-weight:700;">S/ ${e.realCost.toFixed(2)}</td>
+      <td><span class="edit-btn" onclick="openEditModal(${e.id})" title="Editar">✎</span></td>
+    </tr>
+  `).join('');
+}
+
+function setFilter(cat) {
+  currentFilter = cat;
+  renderDetailTable();
+}
+
+// ---------- Modal ----------
+
+function openEditModal(id) {
+  const expenses = getMonthData().expenses;
+  const e = expenses.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('modalTitle').textContent = 'Editar Gasto';
+  document.getElementById('editId').value = id;
+  document.getElementById('editName').value = e.name;
+  document.getElementById('editCategory').value = e.category;
+  document.getElementById('editAmount').value = e.amount;
+  document.getElementById('editPayment').value = e.payment;
+  document.getElementById('editShared').value = e.shared;
+  document.getElementById('editPersons').value = e.persons;
+  document.getElementById('deleteBtn').style.display = 'inline-block';
+  toggleSharedFields();
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = 'Agregar Gasto';
+  document.getElementById('editId').value = '';
+  document.getElementById('editName').value = '';
+  document.getElementById('editCategory').value = 'Online';
+  document.getElementById('editAmount').value = '';
+  document.getElementById('editPayment').value = '';
+  document.getElementById('editShared').value = 'No';
+  document.getElementById('editPersons').value = 2;
+  document.getElementById('deleteBtn').style.display = 'none';
+  toggleSharedFields();
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+function toggleSharedFields() {
+  document.getElementById('sharedFields').style.display =
+    document.getElementById('editShared').value === 'Sí' ? 'block' : 'none';
+}
+
+async function saveEdit() {
+  const id = document.getElementById('editId').value;
+  const name = document.getElementById('editName').value.trim();
+  const category = document.getElementById('editCategory').value;
+  const amount = parseFloat(document.getElementById('editAmount').value);
+  const payment = document.getElementById('editPayment').value.trim();
+  const shared = document.getElementById('editShared').value;
+  const persons = parseInt(document.getElementById('editPersons').value) || 1;
+
+  if (!name || isNaN(amount) || amount <= 0) {
+    alert('Completa el nombre y un monto válido.');
+    return;
+  }
+
+  const realCost = shared === 'Sí' ? parseFloat((amount / persons).toFixed(2)) : amount;
+  const expenses = getMonthData().expenses;
+  const expenseId = id ? parseInt(id) : (expenses.length > 0 ? Math.max(...expenses.map(e => e.id)) + 1 : 1);
+
+  const expense = { id: expenseId, name, category, amount, payment, shared, persons, realCost };
+
+  closeModal();
+  showSync(true);
+  try {
+    appData = await apiPost('saveExpense', { mes: currentMonth, expense });
+    renderAll();
+  } catch (err) {
+    showError('No se pudo guardar: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+async function deleteExpenseHandler() {
+  const id = parseInt(document.getElementById('editId').value);
+  if (!id) return;
+  if (!confirm('¿Eliminar este gasto?')) return;
+
+  closeModal();
+  showSync(true);
+  try {
+    appData = await apiPost('deleteExpense', { mes: currentMonth, id });
+    renderAll();
+  } catch (err) {
+    showError('No se pudo eliminar: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+document.getElementById('modalOverlay').addEventListener('click', function (e) {
+  if (e.target === this) closeModal();
+});
+
+// ---------- Ingreso ----------
+
+async function editIncome() {
+  const month = getMonthData();
+  const newIncome = prompt('Ingresa el ingreso de ' + month.label + ' (S/):', month.income);
+  if (newIncome === null || isNaN(parseFloat(newIncome))) return;
+
+  showSync(true);
+  try {
+    appData = await apiPost('updateIncome', { mes: currentMonth, income: parseFloat(newIncome) });
+    renderAll();
+  } catch (err) {
+    showError('No se pudo actualizar el ingreso: ' + err.message);
+  } finally {
+    showSync(false);
+  }
+}
+
+document.getElementById('kpiRow').addEventListener('click', function (e) {
+  const card = e.target.closest('.kpi-card');
+  if (card && card.querySelector('.kpi-label').textContent === 'Ingreso Mensual') {
+    editIncome();
+  }
+});
+
+// ---------- Render general ----------
+
+function renderAll() {
+  renderKPIs();
+  renderPieChart();
+  renderBarChart();
+  renderSavingsBar();
+  renderDetailTable();
+}
+
+init();
+</script>
+</body>
+</html>
