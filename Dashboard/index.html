@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mi Presupuesto — Dashboard Interactivo</title>
+<title>.:: Mi Presupuesto ::.</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<link rel="icon" href="../assets/img/favicon-16x16.png" type="image/png">
 <style>
   /* Estilos mínimos para el overlay de carga / error, no dependen de styles.css */
   #syncOverlay {
@@ -110,6 +111,9 @@
         <option value="Hogar">Hogar</option>
         <option value="Online">Online</option>
         <option value="Salud">Salud</option>
+        <option value="Estudios">Estudios</option>
+        <option value="Transporte">Transporte</option>
+        <option value="Otros">Otros</option>
       </select>
     </div>
     <div class="modal-field">
@@ -285,7 +289,7 @@ function getMonthData() {
 function calcTotals(expenses, income) {
   let totalBruto = 0;
   let totalReal = 0;
-  const byCat = { Hogar: 0, Online: 0, Salud: 0 };
+  const byCat = { Hogar: 0, Online: 0, Salud: 0, Estudios: 0, Transporte: 0, Otros: 0 };
   expenses.forEach(e => {
     totalBruto += e.amount;
     totalReal += e.realCost;
@@ -352,7 +356,7 @@ function renderPieChart() {
   pieChartInstance = echarts.init(dom);
 
   const pieData = Object.entries(t.byCat).map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
-  const colorMap = { 'Hogar': '#C45D3E', 'Online': '#4A6B8A', 'Salud': '#4A7C59' };
+  const colorMap = { 'Hogar': '#C45D3E', 'Online': '#4A6B8A', 'Salud': '#4A7C59', 'Estudios': '#8A6BAF', 'Transporte': '#D4A24C', 'Otros': '#8A8680' };
 
   pieChartInstance.setOption({
     tooltip: { trigger: 'item', formatter: p => `${p.name}<br/>S/ ${p.value.toFixed(2)} (${p.percent}%)` },
@@ -471,7 +475,7 @@ function renderDetailTable() {
   const filtered = currentFilter === 'Todos' ? expenses : expenses.filter(e => e.category === currentFilter);
 
   const tabs = document.getElementById('catTabs');
-  const cats = ['Todos', 'Hogar', 'Online', 'Salud'];
+  const cats = ['Todos', 'Hogar', 'Online', 'Salud', 'Estudios', 'Transporte', 'Otros'];
   tabs.innerHTML = cats.map(c =>
     `<button class="cat-tab ${c === currentFilter ? 'active' : ''}" onclick="setFilter('${c}')">${c}</button>`
   ).join('');
